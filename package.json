@@ -1,0 +1,33 @@
+{
+  "name": "leaflet.worldwrap",
+  "version": "2.0.0",
+  "description": "A Leaflet plugin that seamlessly wraps vector layers across the antimeridian without splitting them.",
+  "main": "leaflet.worldwrap.js",
+  "keywords": [
+    "leaflet",
+    "leaflet-plugin",
+    "antimeridian",
+    "dateline",
+    "world-wrap",
+    "gis",
+    "map"
+  ],
+  "author": "Eric Dalnas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/edalnas/leaflet.worldwrap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/edalnas/leaflet.worldwrap/issues"
+  },
+  "homepage": "https://github.com/edalnas/leaflet.worldwrap",
+  "peerDependencies": {
+    "leaflet": ">=1.0.0"
+  },
+  "files": [
+    "leaflet.worldwrap.js",
+    "LICENSE",
+    "README.md"
+  ]
+}
