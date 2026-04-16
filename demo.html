@@ -62,6 +62,31 @@
         }
         .controls input[type=range] { width: 70px; }
         .controls .sep { color: #ddd; font-size: 18px; }
+
+        /* ---- layer toggle & refresh buttons ---- */
+        .btn-bar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 7px 14px;
+            border: none;
+            border-radius: 7px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            transition: opacity .15s;
+        }
+        .btn:hover { opacity: .85; }
+        .btn-add    { background: #27ae60; color: #fff; }
+        .btn-remove { background: #e74c3c; color: #fff; }
+        .btn-remove:disabled { background: #ccc; cursor: default; opacity: 1; }
     </style>
 </head>
 <body>
@@ -79,6 +104,11 @@
         Pan left / right to see every feature seamlessly repeat.<br>
         Zoom out to see multiple world copies at once.
     </p>
+</div>
+
+<div class="btn-bar">
+    <button class="btn btn-add"     id="btnAdd">+ Add Layer</button>
+    <button class="btn btn-remove"  id="btnRemove" disabled>− Remove Layer</button>
 </div>
 
 <!-- Demonstrates that setStyle() on the original propagates to all shadow copies -->
@@ -210,6 +240,49 @@ L.geoJSON({
         layer.bindPopup('<b>' + f.properties.name + '</b><br>GeoJSON line crossing the antimeridian');
     }
 }).addTo(map);
+
+// ── Add / Remove / Refresh buttons ──────────────────────────────────
+// Pool of extra layers that can be toggled on and off to demonstrate
+// that the plugin correctly tracks and unracks layers at runtime.
+var extraLayers = [];
+var extraColors = ['#1abc9c', '#8e44ad', '#e67e22', '#16a085', '#d35400'];
+var extraCount  = 0;
+
+var btnAdd     = document.getElementById('btnAdd');
+var btnRemove  = document.getElementById('btnRemove');
+var btnRefresh = document.getElementById('btnRefresh');
+
+function syncButtons() {
+    btnRemove.disabled = extraLayers.length === 0;
+}
+
+btnAdd.addEventListener('click', function () {
+    var color  = extraColors[extraCount % extraColors.length];
+    var offset = (extraCount % 5 - 2) * 5;   // slight lat offset so layers don't stack
+    extraCount++;
+
+    var layer = L.polyline([
+        [ 5 + offset, 150],
+        [10 + offset, 165],
+        [10 + offset, -175],   // crosses antimeridian
+        [ 5 + offset, -160],
+        [ 0 + offset, -150]
+    ], { color: color, weight: 3, opacity: .9 })
+    .bindPopup('<b>Dynamic Layer ' + extraCount + '</b><br>Added at runtime — watch the shadows appear.')
+    .addTo(map);
+
+    extraLayers.push(layer);
+    syncButtons();
+});
+
+btnRemove.addEventListener('click', function () {
+    if (!extraLayers.length) return;
+    var layer = extraLayers.pop();
+    map.removeLayer(layer);   // plugin removes all shadows automatically
+    syncButtons();
+});
+
+
 </script>
 </body>
 </html>

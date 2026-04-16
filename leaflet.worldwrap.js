@@ -39,9 +39,16 @@
  *
  * Known limitations
  * -----------------
- *   Shadow copies are independent Leaflet layers.  Editing a shadow with
- *   Leaflet.draw or Leaflet.transform will not automatically propagate back
- *   to the original.  A future version will add that two-way sync.
+ *   Segments must span less than 180° of longitude.  The normalisation step
+ *   works by always choosing the shorter arc between consecutive vertices.
+ *   If two adjacent points are more than 180° apart (e.g. a line from 10°W
+ *   to 175°E going eastward), the algorithm will choose the wrong direction
+ *   and the segment will draw the long way around.  Split such segments at
+ *   an intermediate point before adding them to the map.
+ *
+ *   Dragging a marker shadow propagates the new position back to the original
+ *   and refreshes all copies.  Editing geometry with Leaflet.draw or
+ *   Leaflet.transform on a shadow does not propagate back to the original.
  *
  * @author  Eric Dalnas
  * @license MIT
@@ -150,6 +157,21 @@
         return layer instanceof L.Marker       ||
                layer instanceof L.CircleMarker ||   // catches L.Circle too
                layer instanceof L.Polyline;          // catches L.Polygon / L.Rectangle too
+    }
+
+    /**
+     * Attach a dragend handler to a marker shadow so that dragging the shadow
+     * writes the new position back to the original marker (offset removed),
+     * then triggers a full refresh so all shadows snap to the new position.
+     */
+    function attachShadowDrag(shadow, orig, offset, wwMap) {
+        var handler = function () {
+            var p = shadow.getLatLng();
+            orig.setLatLng([p.lat, p.lng - offset]);
+            wwMap._wwRefresh();
+        };
+        shadow.on('dragend', handler);
+        shadow._wwDragHandler = handler;
     }
 
     /** Shallow-copy an options object (used to give each clone its own copy). */
@@ -301,8 +323,12 @@
             if (layer instanceof L.LayerGroup) {
                 layer.eachLayer(this._wwTrack, this);
                 var self = this;
-                layer.on('layeradd',    function (e) { self._wwTrack(e.layer);   });
-                layer.on('layerremove', function (e) { self._wwUntrack(e.layer); });
+                // Store handler references so they can be removed in _wwUntrack.
+                var wwLayerAdd = function (e) { self._wwTrack(e.layer);   };
+                var wwLayerRem = function (e) { self._wwUntrack(e.layer); };
+                layer.on('layeradd',    wwLayerAdd);
+                layer.on('layerremove', wwLayerRem);
+                layer._wwGroupHandlers = { add: wwLayerAdd, rem: wwLayerRem };
                 return;
             }
 
@@ -319,10 +345,14 @@
             // Register the layer with an empty shadows map.
             this._wwLayers.set(layer, { shadows: {} });
 
-            // Markers fire 'move' when dragged or when setLatLng is called.
-            // Refresh all shadows immediately so the drag feels responsive.
+            // When the *original* marker is dragged, refresh all shadows once
+            // the drag ends.  We skip real-time 'move' updates for performance;
+            // shadows snap to the correct position on dragend instead.
             if (layer instanceof L.Marker) {
-                layer.on('move', function () { this._wwRefresh(); }, this);
+                var wwMap = this;
+                var wwDragEndHandler = function () { wwMap._wwRefresh(); };
+                layer.on('dragend', wwDragEndHandler);
+                layer._wwMoveHandler = wwDragEndHandler;
             }
 
             // Patch setStyle so that any style change on the original layer
@@ -331,10 +361,13 @@
             // cloned with and fall out of sync after the first setStyle call.
             if (layer.setStyle && !layer._wwStylePatched) {
                 var map = this;
-                var _origSetStyle = layer.setStyle.bind(layer);
+                // Save the original so it can be restored in _wwUntrack,
+                // releasing the closure's reference to this map.
+                var _hadOwn = layer.hasOwnProperty('setStyle');
+                var _origSetStyle = layer.setStyle;
                 layer.setStyle = function (style) {
                     // Apply to the original first.
-                    _origSetStyle(style);
+                    _origSetStyle.call(layer, style);
                     // Then mirror to every shadow.
                     var rec = map._wwLayers && map._wwLayers.get(layer);
                     if (rec) {
@@ -344,7 +377,9 @@
                     }
                     return layer;
                 };
-                layer._wwStylePatched = true;
+                layer._wwOrigSetStyle    = _origSetStyle;
+                layer._wwHadOwnSetStyle  = _hadOwn;
+                layer._wwStylePatched    = true;
             }
 
             // Place this layer's first round of shadows.
@@ -358,6 +393,13 @@
         _wwUntrack: function (layer) {
             if (layer instanceof L.LayerGroup) {
                 layer.eachLayer(this._wwUntrack, this);
+                // Remove the layeradd/layerremove listeners we attached in
+                // _wwTrack so the group no longer holds a closure to this map.
+                if (layer._wwGroupHandlers) {
+                    layer.off('layeradd',    layer._wwGroupHandlers.add);
+                    layer.off('layerremove', layer._wwGroupHandlers.rem);
+                    delete layer._wwGroupHandlers;
+                }
                 return;
             }
 
@@ -368,11 +410,33 @@
             // override from trying to untrack the shadows themselves.
             this._wwBusy = true;
             for (var k in rec.shadows) {
+                if (rec.shadows[k]._wwDragHandler) {
+                    rec.shadows[k].off('dragend', rec.shadows[k]._wwDragHandler);
+                }
                 _rem.call(this, rec.shadows[k]);
             }
             this._wwBusy = false;
 
             this._wwLayers.delete(layer);
+
+            // Restore the original setStyle so the patched closure (which
+            // holds a reference to this map) does not prevent GC of either.
+            if (layer._wwStylePatched) {
+                if (layer._wwHadOwnSetStyle) {
+                    layer.setStyle = layer._wwOrigSetStyle;
+                } else {
+                    delete layer.setStyle;   // fall back to the prototype method
+                }
+                delete layer._wwOrigSetStyle;
+                delete layer._wwHadOwnSetStyle;
+                delete layer._wwStylePatched;
+            }
+
+            // Remove the dragend listener added for original markers.
+            if (layer._wwMoveHandler) {
+                layer.off('dragend', layer._wwMoveHandler);
+                delete layer._wwMoveHandler;
+            }
         },
 
         /**
@@ -396,21 +460,38 @@
             // Remove shadows for worlds that are no longer visible.
             for (var sk in sh) {
                 if (!need[sk]) {
+                    if (sh[sk]._wwDragHandler) {
+                        sh[sk].off('dragend', sh[sk]._wwDragHandler);
+                    }
                     _rem.call(this, sh[sk]);
                     delete sh[sk];
                 }
             }
 
-            // Create shadows for worlds that just became visible.
+            // Create shadows for worlds that just became visible;
+            // update position for existing shadows of movable point layers.
             for (var nk in need) {
+                var nki = parseInt(nk, 10);
+                var d   = nki * 360;
                 if (!sh[nk]) {
-                    nk = parseInt(nk, 10);
-                    var cl = cloneShifted(layer, nk * 360);
+                    var cl = cloneShifted(layer, d);
                     if (cl) {
                         cl._wwShadow = true;    // prevents double-tracking
                         _add.call(this, cl);
                         sh[nk] = cl;
+                        // Draggable marker shadows write back to the original
+                        // on dragend so dragging any copy moves the real marker.
+                        if (layer instanceof L.Marker && layer.options.draggable) {
+                            attachShadowDrag(cl, layer, d, this);
+                        }
                     }
+                } else if (layer instanceof L.Marker ||
+                           layer instanceof L.Circle ||
+                           layer instanceof L.CircleMarker) {
+                    // Point layers can move (drag, setLatLng) — keep the
+                    // shadow's position in sync with the original.
+                    var p = layer.getLatLng();
+                    sh[nk].setLatLng([p.lat, p.lng + d]);
                 }
             }
         },

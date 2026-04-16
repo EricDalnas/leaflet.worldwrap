@@ -3,6 +3,8 @@
 A [Leaflet](https://leafletjs.com) plugin that makes vector layers render
 correctly and continuously across the antimeridian (the ±180° longitude line).
 
+**[Live Demo](https://ericdalnas.github.io/leaflet.worldwrap/demo.html)** — pan east or west, zoom in and out, and watch features appear seamlessly in every world copy.
+
 ## The Problem
 
 Leaflet's tile layer already repeats the world seamlessly when you pan left or
@@ -15,8 +17,6 @@ at the seam.
 
 ## The Approach
 
-Leaflet.WorldWrap **never splits anything**.
-
 1. Coordinates are **normalised** so consecutive vertices never jump more than
    180° of longitude, eliminating the "wrong-way" line across the map.
 2. A **shadow clone** is maintained for every tracked layer in each world copy
@@ -25,11 +25,6 @@ Leaflet.WorldWrap **never splits anything**.
 3. As you pan, stale shadows are **removed** and new ones are **created** in
    real time on Leaflet's `move` event — not just after panning stops — so
    there is no visible pop-in during fast panning.
-
-## Demo
-
-Open `demo.html` in a browser. Pan east or west, zoom in and out, and watch
-the features appear seamlessly in every world copy.
 
 ## Installation
 
@@ -41,7 +36,7 @@ the features appear seamlessly in every world copy.
 ## Usage
 
 Pass `worldWrap: true` when creating your map. Every layer you add after that
-is handled automatically — no changes to your layer code required.
+is handled automatically — no changes to your layer code required. worldCopyJump should be set to false (this is the default).
 
 ```js
 var map = L.map('map', {
@@ -97,23 +92,23 @@ removes any shadow for a world that is no longer visible.
 
 ## Known Limitations
 
-- **Editing shadows**: Shadow copies are independent Leaflet layers. Editing
-  one with Leaflet.draw or Leaflet.transform will not propagate back to the
-  original or to other shadows.
+- **Segments must span less than 180° of longitude**: The normalisation step
+  always chooses the shorter arc between consecutive vertices. If two adjacent
+  points are more than 180° apart (e.g. a line from 10°W to 175°E going
+  eastward), the algorithm will pick the wrong direction and the segment will
+  draw the long way around. Split such segments at an intermediate point before
+  adding them to the map.
 
-- **Custom layer types**: Only the built-in Leaflet vector types listed above
-  are cloned. Custom layer subclasses that do not extend one of those types
-  will be ignored.
+- **Editing geometry shadows**: Dragging a marker shadow propagates the new
+  position back to the original and refreshes all copies. However, editing
+  polygon or polyline geometry on a shadow with Leaflet.draw or
+  Leaflet.transform does not propagate back to the original.
 
 - **Performance with large layer counts**: Each tracked layer gets one full
   Leaflet clone per visible world copy (typically 2–4 at normal zoom levels).
   For small to medium datasets this is negligible. At large scales — thousands
   of features, or a dense GeoJSON layer — the overhead of maintaining and
-  rendering that many extra SVG/Canvas elements can become noticeable. If you
-  hit performance problems, consider clustering small features with
-  [Leaflet.markercluster](https://github.com/Leaflet/Leaflet.markercluster),
-  simplifying geometry before adding it to the map, or only adding the plugin
-  to maps where the antimeridian region is actually relevant.
+  rendering that many extra SVG/Canvas elements can become noticeable.
 
 ## Browser / Leaflet Compatibility
 
