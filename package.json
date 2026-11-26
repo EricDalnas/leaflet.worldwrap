@@ -23,11 +23,16 @@
   },
   "homepage": "https://github.com/edalnas/leaflet.worldwrap",
   "peerDependencies": {
-    "leaflet": ">=1.0.0"
+    "leaflet": ">=1.0.0 || >=2.0.0-beta.5"
   },
   "files": [
     "leaflet.worldwrap.js",
     "LICENSE",
     "README.md"
-  ]
+  ],
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "globals": "^17.5.0"
+  }
 }

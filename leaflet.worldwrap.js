@@ -54,13 +54,28 @@
  * @license MIT
  * @version 2.0.0
  */
+/* global define, module, require, L */
+// This wrapper lets the plugin use Leaflet in several kinds of JavaScript
+// projects.  It is NOT another copy of Leaflet: it detects which loading
+// system is already in use, obtains Leaflet through that system, and hands
+// the resulting Leaflet object to the plugin code below.
 (function (factory) {
-    // Support AMD (RequireJS), CommonJS (Node / Browserify / webpack),
-    // and plain browser globals.
+    // AMD loading (RequireJS).  AMD provides dependencies to "define".
+    // Asking for "leaflet" makes RequireJS load Leaflet and pass it to
+    // "factory".  The plugin will then run with Leaflet as its argument.
     if (typeof define === 'function' && define.amd) {
         define(['leaflet'], factory);
+
+    // CommonJS loading (Node.js, webpack, Browserify, and similar tools).
+    // "require('leaflet')" imports Leaflet.  Calling "factory(...)" starts
+    // the plugin, and the returned plugin value becomes this module's export.
     } else if (typeof module === 'object' && module.exports) {
         module.exports = factory(require('leaflet'));
+
+    // Plain browser loading.  A normal demo loads Leaflet first with a
+    // <script> tag, which creates the global variable "L".  The plugin script
+    // is then loaded afterward, and this branch passes that global L object
+    // to the plugin implementation.
     } else {
         if (typeof L === 'undefined') {
             throw new Error('Leaflet must be loaded before Leaflet.WorldWrap');
@@ -550,6 +565,34 @@
         _rem.call(this, layer);
         return this;
     };
+
+    // Leaflet 2 beta exposes classes but removed the lowercase factory
+    // functions used by Leaflet 1.x (for example L.map() and L.polyline()).
+    // Restore only the factories used by the plugin and add a class-alias
+    // fallback so existing Leaflet 1.x code continues to work unchanged.
+    if (!L.latLng && L.LatLng) {
+        L.latLng = function (a, b, c) { return new L.LatLng(a, b, c); };
+    }
+    function factory(name, ClassName) {
+        if (!L[name] && L[ClassName]) {
+            L[name] = function () {
+                var args = Array.prototype.slice.call(arguments);
+                if (typeof args[0] !== 'object') args[0] = args[0];
+                var Constructor = L[ClassName];
+                return new (Function.prototype.bind.apply(Constructor, [null].concat(args)))();
+            };
+        }
+    }
+    factory('map', 'Map');
+    factory('marker', 'Marker');
+    factory('circle', 'Circle');
+    factory('circleMarker', 'CircleMarker');
+    factory('polyline', 'Polyline');
+    factory('polygon', 'Polygon');
+    factory('rectangle', 'Rectangle');
+    factory('geoJSON', 'GeoJSON');
+    factory('geoJson', 'GeoJSON');
+    factory('tileLayer', 'TileLayer');
 
     return L.WorldWrap;
 
