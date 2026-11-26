@@ -3,7 +3,12 @@
 A [Leaflet](https://leafletjs.com) plugin that makes vector layers render
 correctly and continuously across the antimeridian (the ±180° longitude line).
 
-**[Live Demo](https://ericdalnas.github.io/leaflet.worldwrap/demo.html)** — pan east or west, zoom in and out, and watch features appear seamlessly in every world copy.
+**Live demos:**
+
+- **[Leaflet 1.9.4 Demo](https://ericdalnas.github.io/leaflet.worldwrap/demo.html)** — the original demo.
+- **[Leaflet 2.0.0-beta.5 Demo](https://ericdalnas.github.io/leaflet.worldwrap/demo.2.0.0-beta.5.html)** — tested against the latest Leaflet 2 beta.
+
+Pan east or west, zoom in and out, and watch features appear seamlessly in every world copy.
 
 ## The Problem
 
@@ -112,7 +117,10 @@ removes any shadow for a world that is no longer visible.
 
 ## Browser / Leaflet Compatibility
 
-Tested against Leaflet 1.9.x. Should work with any Leaflet 1.x build.
+Tested against Leaflet 1.9.x and Leaflet 2.0.0-beta.5.
+The plugin provides the lowercase Leaflet factory compatibility needed by 1.x-style
+plugin code when Leaflet 2 exports classes directly.
+
 No external dependencies beyond Leaflet itself.
 
 ES5-compatible; no transpilation required.

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leaflet.WorldWrap Demo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-beta.5/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        #map { position: absolute; inset: 0; }
+
+        /* ---- info panel ---- */
+        .panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: #fff;
+            padding: 16px 18px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.18);
+            max-width: 330px;
+            font-size: 13.5px;
+            line-height: 1.55;
+            color: #333;
+        }
+        .panel h2 { font-size: 17px; margin-bottom: 6px; color: #1a1a2e; }
+        .panel p  { margin-bottom: 8px; }
+        .panel .muted { color: #888; font-size: 12px; border-top: 1px solid #eee; padding-top: 8px; margin-top: 4px; }
+
+        /* legend */
+        .legend { margin: 10px 0 4px; }
+        .legend div { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+        .swatch      { width: 22px; height: 4px; border-radius: 2px; flex-shrink: 0; }
+        .swatch.dot  { width: 10px; height: 10px; border-radius: 50%; }
+        .swatch.area { height: 12px; border: 2px solid; border-radius: 3px; }
+
+        /* ---- style controls ---- */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.18);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            color: #333;
+            white-space: nowrap;
+        }
+        .controls b { color: #1a1a2e; }
+        .controls select, .controls input { cursor: pointer; vertical-align: middle; }
+        .controls input[type=color] {
+            width: 32px; height: 26px;
+            border: 1px solid #ccc; border-radius: 4px; padding: 1px 2px;
+        }
+        .controls input[type=range] { width: 70px; }
+        .controls .sep { color: #ddd; font-size: 18px; }
+
+        /* ---- layer toggle & refresh buttons ---- */
+        .btn-bar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 7px 14px;
+            border: none;
+            border-radius: 7px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            transition: opacity .15s;
+        }
+        .btn:hover { opacity: .85; }
+        .btn-add    { background: #27ae60; color: #fff; }
+        .btn-remove { background: #e74c3c; color: #fff; }
+        .btn-remove:disabled { background: #ccc; cursor: default; opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel">
+    <h2>Leaflet.WorldWrap · Leaflet 2.0 beta</h2>
+    <p>
+        Features are normalised so they draw the short way across, then
+        <strong>duplicated</strong> into every visible world copy.
+    </p>
+
+    <p class="muted">
+        Pan left / right to see every feature seamlessly repeat.<br>
+        Zoom out to see multiple world copies at once.
+    </p>
+</div>
+
+<div class="btn-bar">
+    <button class="btn btn-add"     id="btnAdd">+ Add Layer</button>
+    <button class="btn btn-remove"  id="btnRemove" disabled>− Remove Layer</button>
+</div>
+
+<!-- Demonstrates that setStyle() on the original propagates to all shadow copies -->
+<div class="controls">
+    <b>Trans-Pacific route:</b>
+    <span class="sep">|</span>
+    Color <input type="color" id="ctrlColor" value="#e74c3c" />
+    <span class="sep">|</span>
+    Style <select id="ctrlDash">
+        <option value="">Solid</option>
+        <option value="8 6" selected>Dashed</option>
+        <option value="2 5">Dotted</option>
+        <option value="12 4 2 4">Dash‑dot</option>
+    </select>
+    <span class="sep">|</span>
+    Width <input type="range" id="ctrlWeight" min="1" max="10" value="3" />
+    <span id="ctrlWeightLbl">3px</span>
+</div>
+
+<script type="module">
+import * as Leaflet from 'https://unpkg.com/leaflet@2.0.0-beta.5/dist/leaflet.js';
+window.L = { ...Leaflet };
+
+// Leaflet 2 beta compatibility is provided by leaflet.worldwrap.js.
+// Load it once before creating the map or any layers.
+await import('./leaflet.worldwrap.js?v=2');
+
+// ── Map ─────────────────────────────────────────────────────────────
+var map = L.map('map', {
+    worldWrap: true,            // enable the plugin
+    worldCopyJump: false,       // keep the antimeridian view stable
+    center: [10, 180],
+    zoom: 3,
+    zoomSnap: 0.10,
+    zoomDelta: 0.10,
+    wheelPxPerZoomLevel: 30
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    noWrap: false
+}).addTo(map);
+
+// ── 1. Trans-Pacific shipping route (crosses antimeridian) ──────────
+var transPacific = L.polyline([
+    [35.68,  139.69],   // Tokyo
+    [40.00,  160.00],
+    [42.00,  170.00],
+    [40.00, -170.00],   // ← antimeridian crossing
+    [37.00, -155.00],
+    [37.77, -122.42]    // San Francisco
+], {
+    color: '#e74c3c', weight: 3, dashArray: '8 6', opacity: .9
+}).addTo(map)
+  .bindPopup('<b>Trans-Pacific Route</b><br>Tokyo → San Francisco<br>Crosses the antimeridian seamlessly.');
+
+// ── Style controls ────────────────────────────────────────────────────────
+// Any style change here calls transPacific.setStyle(), which the plugin
+// automatically mirrors to all shadow copies across every world strip.
+var ctrlColor  = document.getElementById('ctrlColor');
+var ctrlDash   = document.getElementById('ctrlDash');
+var ctrlWeight = document.getElementById('ctrlWeight');
+var ctrlWeightLbl = document.getElementById('ctrlWeightLbl');
+
+function applyStyle() {
+    var w = parseInt(ctrlWeight.value, 10);
+    ctrlWeightLbl.textContent = w + 'px';
+    transPacific.setStyle({
+        color:     ctrlColor.value,
+        dashArray: ctrlDash.value,
+        weight:    w
+    });
+}
+
+ctrlColor.addEventListener('input',  applyStyle);
+ctrlDash.addEventListener('change',  applyStyle);
+ctrlWeight.addEventListener('input', applyStyle);
+
+// ── 2. Fiji region polygon (spans ~176°E to ~179°W) ─────────────────
+L.polygon([
+    [-12, 176], [-12, -179], [-22, -179], [-22, 176]
+], {
+    color: '#3498db', fillColor: '#3498db', fillOpacity: .2, weight: 2
+}).addTo(map)
+  .bindPopup('<b>Fiji Region</b><br>Polygon spanning the antimeridian<br>176°E → 179°W — no splitting!');
+
+// ── 3. City markers near the dateline ───────────────────────────────
+[
+    { n: 'Suva, Fiji',           ll: [-18.14,  178.44] },
+    { n: "Nuku'alofa, Tonga",    ll: [-21.21, -175.20] },
+    { n: 'Apia, Samoa',          ll: [-13.83, -171.76] },
+    { n: 'Funafuti, Tuvalu',     ll: [ -8.52,  179.20] },
+    { n: 'Tarawa, Kiribati',     ll: [  1.45,  173.00] },
+    { n: 'Tokyo, Japan',         ll: [ 35.68,  139.69] },
+    { n: 'Honolulu, HI',         ll: [ 21.31, -157.86] },
+    { n: 'San Francisco, CA',    ll: [ 37.77, -122.42] }
+].forEach(function (c) {
+    L.marker(c.ll, { title: c.n, draggable: true })
+     .addTo(map)
+     .bindPopup('<b>' + c.n + '</b><br>Lat ' + c.ll[0] + ', Lng ' + c.ll[1])
+     .bindTooltip(c.n, { direction: 'top', offset: [0, -10] });
+});
+
+// ── 4. Circle on the antimeridian ───────────────────────────────────
+L.circle([0, 180], {
+    radius: 800000,
+    color: '#9b59b6', fillColor: '#9b59b6', fillOpacity: .15, weight: 2
+}).addTo(map)
+  .bindPopup('<b>Dateline Circle</b><br>800 km radius centred on the antimeridian');
+
+// ── 5. GeoJSON crossing the dateline (Aleutian Islands route) ───────
+L.geoJSON({
+    type: 'Feature',
+    properties: { name: 'Aleutian Islands Route' },
+    geometry: {
+        type: 'LineString',
+        coordinates: [      // [lng, lat]
+            [165,  54],
+            [170,  53.5],
+            [175,  52.8],
+            [-179, 52],       // ← crosses
+            [-175, 51.8],
+            [-170, 52],
+            [-165, 53]
+        ]
+    }
+}, {
+    style: { color: '#f39c12', weight: 3, opacity: .85 },
+    onEachFeature: function (f, layer) {
+        layer.bindPopup('<b>' + f.properties.name + '</b><br>GeoJSON line crossing the antimeridian');
+    }
+}).addTo(map);
+
+// ── Add / Remove / Refresh buttons ──────────────────────────────────
+// Pool of extra layers that can be toggled on and off to demonstrate
+// that the plugin correctly tracks and unracks layers at runtime.
+var extraLayers = [];
+var extraColors = ['#1abc9c', '#8e44ad', '#e67e22', '#16a085', '#d35400'];
+var extraCount  = 0;
+
+var btnAdd     = document.getElementById('btnAdd');
+var btnRemove  = document.getElementById('btnRemove');
+var btnRefresh = document.getElementById('btnRefresh');
+
+function syncButtons() {
+    btnRemove.disabled = extraLayers.length === 0;
+}
+
+btnAdd.addEventListener('click', function () {
+    var color  = extraColors[extraCount % extraColors.length];
+    var offset = (extraCount % 5 - 2) * 5;   // slight lat offset so layers don't stack
+    extraCount++;
+
+    var layer = L.polyline([
+        [ 5 + offset, 150],
+        [10 + offset, 165],
+        [10 + offset, -175],   // crosses antimeridian
+        [ 5 + offset, -160],
+        [ 0 + offset, -150]
+    ], { color: color, weight: 3, opacity: .9 })
+    .bindPopup('<b>Dynamic Layer ' + extraCount + '</b><br>Added at runtime — watch the shadows appear.')
+    .addTo(map);
+
+    extraLayers.push(layer);
+    syncButtons();
+});
+
+btnRemove.addEventListener('click', function () {
+    if (!extraLayers.length) return;
+    var layer = extraLayers.pop();
+    map.removeLayer(layer);   // plugin removes all shadows automatically
+    syncButtons();
+});
+
+
+</script>
+</body>
+</html>
